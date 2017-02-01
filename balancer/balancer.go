@@ -153,8 +153,11 @@ func main() {
 
 	videos := GetVideos(DB)
 
+	fmt.Printf("Video %d fined!\n", len(videos))
+
 	//Все видео на момент запуска
 	//0 воркеров
+
 	for {
 		if len(videos) > 0 && ws.Free() > 0 {
 			for i, v := range videos {
@@ -172,6 +175,9 @@ func main() {
 				time.Sleep(5000 * time.Millisecond)
 			}
 
+		} else {
+			fmt.Println("Zero free workers!")
+			time.Sleep(5000 * time.Millisecond)
 		}
 	}
 }
