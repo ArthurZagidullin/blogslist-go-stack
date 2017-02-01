@@ -8,9 +8,9 @@ import (
 	"log"
 	"net/http"
 	// "os"
+	"blogslist/worker/config"
+	"blogslist/worker/video"
 	"time"
-	"worker/config"
-	"worker/video"
 )
 
 const (
@@ -78,11 +78,11 @@ func main() {
 		}
 	}
 
-	go func() {
-		log.Printf("Port listen %s", Configuration.Port)
-		http.HandleFunc("/add/", handler)
-		http.ListenAndServe(":"+Configuration.Port, nil)
-	}()
+	// go func() {
+	log.Printf("Port listen %s", Configuration.Port)
+	http.HandleFunc("/add/", handler)
+	http.ListenAndServe(":"+Configuration.Port, nil)
+	// }()
 
 	itr := 0
 	log.Println("Loop started!")
