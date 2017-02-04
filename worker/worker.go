@@ -64,7 +64,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 //период работы и список id-видео
 //список может дополнятся
 func main() {
-	runtime.GOMAXPROCS(2)
+	numCPU := runtime.NumCPU()
+	log.Println("GOMAXPROCS = %d", numCPU)
+	runtime.GOMAXPROCS(numCPU)
+
 	Configuration.Init()
 
 	log.Println("Start Registration worker!")
@@ -97,6 +100,9 @@ func main() {
 				time.Sleep(period * time.Millisecond)
 			}
 			itr++
+		} else {
+			time.Sleep(5000 * time.Millisecond)
+			log.Println("Wait videos!")
 		}
 	}
 }
