@@ -10,6 +10,7 @@ import (
 	// "os"
 	"blogslist/worker/config"
 	"blogslist/worker/video"
+	"runtime"
 	"time"
 )
 
@@ -63,6 +64,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 //период работы и список id-видео
 //список может дополнятся
 func main() {
+	runtime.GOMAXPROCS(2)
 	Configuration.Init()
 
 	log.Println("Start Registration worker!")
