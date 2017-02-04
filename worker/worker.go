@@ -65,8 +65,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 //список может дополнятся
 func main() {
 	numCPU := runtime.NumCPU()
-	log.Println("GOMAXPROCS = %d", numCPU)
-	runtime.GOMAXPROCS(numCPU)
+	log.Printf("GOMAXPROCS = %d", numCPU)
+	runtime.GOMAXPROCS(numCPU * 2)
 
 	Configuration.Init()
 
@@ -79,18 +79,21 @@ func main() {
 			log.Println("Worker authorized!")
 			break
 		} else {
+			runtime.Gosched()
 			time.Sleep(5000 * time.Millisecond)
 		}
 	}
 
-	// go func() {
-	log.Printf("Port listen %s", Configuration.Port)
-	http.HandleFunc("/add/", handler)
-	http.ListenAndServe(":"+Configuration.Port, nil)
-	// }()
+	go func() {
+		log.Printf("Port listen %s", Configuration.Port)
+		http.HandleFunc("/add/", handler)
+		http.ListenAndServe(":"+Configuration.Port, nil)
+	}()
 
 	itr := 0
 	log.Println("Loop started!")
+
+	runtime.LockOSThread()
 	for {
 		if len(Stack.Videos) > 0 {
 			log.Printf("Itteration #%d \n", itr)
@@ -101,8 +104,9 @@ func main() {
 			}
 			itr++
 		} else {
-			time.Sleep(5000 * time.Millisecond)
+			runtime.Gosched()
 			log.Println("Wait videos!")
+			time.Sleep(5000 * time.Millisecond)
 		}
 	}
 }

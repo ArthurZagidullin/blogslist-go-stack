@@ -6,9 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"runtime"
 	// "github.com/streadway/amqp"
-	"os"
+	// "os"
 	"time"
 )
 import _ "github.com/go-sql-driver/mysql"
@@ -53,7 +55,7 @@ func (c *Configuration) Init() error {
 	flag.StringVar(&filename, "c", "config/local-example.conf", "Configuration filename")
 	flag.Parse()
 
-	fmt.Printf("Config filename: %s \n", filename)
+	log.Printf("Config filename: %s \n", filename)
 
 	if file, err := ioutil.ReadFile(filename); err == nil {
 		err = json.Unmarshal(file, c)
@@ -125,19 +127,23 @@ func RegWorker(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%#v added!\n", wk)
 	w.WriteHeader(http.StatusOK)
 
-	fmt.Printf("Worker: %v", wk)
+	log.Printf("Worker: %v", wk)
 	ws.Add(&wk)
 }
 
 func main() {
+	numCPU := runtime.NumCPU()
+	log.Printf("GOMAXPROCS = %d\n", numCPU)
+	runtime.GOMAXPROCS(numCPU * 2)
+
 	if err := Config.Init(); err != nil {
-		fmt.Printf("Config initialization FAILED! %s \n", err)
+		log.Printf("Config initialization FAILED! %s \n", err)
 	}
 
-	fmt.Printf("%v\n", Config)
+	log.Printf("%v\n", Config)
 
 	go func() {
-		fmt.Fprintf(os.Stdout, "Port listen %s\n", Config.Port)
+		log.Printf("Port listen %s\n", Config.Port)
 		http.HandleFunc("/reg-worker/", RegWorker)
 		http.ListenAndServe(":"+Config.Port, nil)
 	}()
@@ -145,25 +151,25 @@ func main() {
 	var DB *sql.DB
 	var err error
 	if DB, err = sql.Open("mysql", Config.Mysql); err != nil {
-		fmt.Printf("Connection DB FAILED! %s \n", err)
+		log.Printf("Connection DB FAILED! %s \n", err)
 	}
 	defer DB.Close()
 
-	fmt.Println("Connection success!")
+	log.Println("Connection success!")
 
 	videos := GetVideos(DB)
 
-	fmt.Printf("Video %d fined!\n", len(videos))
+	log.Printf("Video %d fined!\n", len(videos))
 
 	//Все видео на момент запуска
 	//0 воркеров
-
+	runtime.LockOSThread()
 	for {
 		if len(videos) > 0 && ws.Free() > 0 {
 			for i, v := range videos {
-				fmt.Printf("video #%d - id: %s\n", i, v.Id)
+				log.Printf("video #%d - id: %s\n", i, v.Id)
 				for _, w := range ws.Workers {
-					fmt.Printf("worker #%s; Limit: %d; Video: %d \n", w.Cdn, w.Limit, len(w.Videos))
+					log.Printf("worker #%s; Limit: %d; Video: %d \n", w.Cdn, w.Limit, len(w.Videos))
 
 					if len(w.Videos) < w.Limit {
 						if ok, _ := w.AddVideo(v); ok {
@@ -174,9 +180,9 @@ func main() {
 				}
 				time.Sleep(5000 * time.Millisecond)
 			}
-
 		} else {
-			fmt.Println("Zero free workers!")
+			runtime.Gosched()
+			log.Println("Zero free workers!")
 			time.Sleep(5000 * time.Millisecond)
 		}
 	}
