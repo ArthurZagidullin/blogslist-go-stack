@@ -112,7 +112,7 @@ func main() {
 	for {
 		if len(Stack.Videos) > 0 {
 			log.Printf("Itteration #%d \n", itr)
-			period := time.Duration(5000 / len(Stack.Videos))
+			period := time.Duration(Configuration.Period / len(Stack.Videos))
 			for _, vid := range Stack.Videos {
 				//Обновление видео
 				go func(c *amqp.Channel) {

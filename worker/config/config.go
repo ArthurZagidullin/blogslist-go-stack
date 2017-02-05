@@ -15,6 +15,7 @@ type Configuration struct {
 	ApiKey   string `json:"api_key"`
 	Limit    int    `json:"limit"`
 	Rabbitmq string `json:"rabbitmq"`
+	Period   int    `json:"period"`
 }
 
 func (c *Configuration) Init() error {
