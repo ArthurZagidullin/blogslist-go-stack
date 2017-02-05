@@ -10,6 +10,7 @@ import (
 	// "os"
 	"blogslist/worker/config"
 	"blogslist/worker/video"
+	"github.com/streadway/amqp"
 	"runtime"
 	"time"
 )
@@ -84,6 +85,20 @@ func main() {
 		}
 	}
 
+	//Подключение к брокеру очередей
+	rabbitConn, err := amqp.Dial(Configuration.Rabbitmq)
+	if err != nil {
+		panic("Rabbitmq connection: " + err.Error())
+	}
+	defer rabbitConn.Close()
+
+	statChannel, err := rabbitConn.Channel()
+	if err != nil {
+		panic(err.Error())
+	}
+	defer statChannel.Close()
+
+	//Сервер приема ID видео
 	go func() {
 		log.Printf("Port listen %s", Configuration.Port)
 		http.HandleFunc("/add/", handler)
@@ -99,7 +114,27 @@ func main() {
 			log.Printf("Itteration #%d \n", itr)
 			period := time.Duration(5000 / len(Stack.Videos))
 			for _, vid := range Stack.Videos {
-				log.Printf("- Video update, id %s\n", vid.Id)
+				//Обновление видео
+				go func(c *amqp.Channel) {
+					stat, err := json.Marshal(vid.Update(Configuration.ApiKey))
+					if err != nil {
+						log.Println("Marshal stat Error: " + err.Error())
+					}
+					msg := amqp.Publishing{
+						DeliveryMode: amqp.Persistent,
+						Timestamp:    time.Now(),
+						ContentType:  "application/json",
+						Body:         stat,
+					}
+					err = c.Publish("logs", "topic", false, false, msg)
+					if err != nil {
+						// Since publish is asynchronous this can happen if the network connection
+						// is reset or if the server has run out of resources.
+						log.Println(err.Error())
+					}
+
+				}(statChannel)
+
 				time.Sleep(period * time.Millisecond)
 			}
 			itr++

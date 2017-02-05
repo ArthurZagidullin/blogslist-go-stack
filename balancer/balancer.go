@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/streadway/amqp"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"runtime"
-	// "github.com/streadway/amqp"
 	// "os"
 	"time"
 )
@@ -22,7 +22,8 @@ type Configuration struct {
 }
 
 type Video struct {
-	Id string
+	Id      string
+	VideoId int
 }
 
 type Worker struct {
@@ -95,7 +96,7 @@ func (ws *WorkerCortage) Free() int {
 func GetVideos(db *sql.DB) []Video {
 	var videos []Video
 
-	rows, err := db.Query("SELECT video_id FROM video")
+	rows, err := db.Query("SELECT id, video_id FROM video")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -103,11 +104,12 @@ func GetVideos(db *sql.DB) []Video {
 
 	for rows.Next() {
 		var video_id string
+		var id int
 
-		if err := rows.Scan(&video_id); err != nil {
+		if err := rows.Scan(&id, &video_id); err != nil {
 			panic(err.Error())
 		}
-		videos = append(videos, Video{video_id})
+		videos = append(videos, Video{Id: video_id, VideoId: id})
 	}
 	return videos
 }
@@ -155,9 +157,76 @@ func main() {
 	}
 	defer DB.Close()
 
+	// insertStmt, err := DB.Prepare("INSERT video_statistic SET `video_id`=?,`view`=?,`like`=?")
+	insertStmt, err := DB.Prepare("INSERT video_statistic SET `video_id`=?,`view`=?,`like`=?,`dislike`=?,`favorite`=?,`comment`=?,`datetime`=?")
+	if err != nil {
+		panic("Stmt prepare error: " + err.Error())
+	}
+
+	//Подключение к брокеру очередей
+	rabbitConn, err := amqp.Dial(Config.Rabbitmq)
+	if err != nil {
+		panic("Rabbitmq connection: " + err.Error())
+	}
+	defer rabbitConn.Close()
+
+	statChannel, err := rabbitConn.Channel()
+	if err != nil {
+		panic(err.Error())
+	}
+	defer statChannel.Close()
+
 	log.Println("Connection success!")
 
 	videos := GetVideos(DB)
+
+	go func(c *amqp.Channel, insertStmt *sql.Stmt) {
+		durable, exclusive := false, false
+		autoDelete, noWait := true, true
+
+		q, _ := c.QueueDeclare("logs", durable, autoDelete, exclusive, noWait, nil)
+		c.QueueBind(q.Name, "#", "logs", false, nil)
+
+		autoAck, exclusive, noLocal, noWait := false, false, false, false
+
+		messages, _ := c.Consume(q.Name, "logs", autoAck, exclusive, noLocal, noWait, nil)
+		multiAck := false
+
+		for msg := range messages {
+			log.Println("Body:", string(msg.Body), "Timestamp:", msg.Timestamp)
+			msg.Ack(multiAck)
+
+			var s struct {
+				Id, ViewCount, LikeCount, DislikeCount, FavorCount, CommentCount string
+			}
+
+			err := json.Unmarshal(msg.Body, &s)
+			if err != nil {
+				log.Println("Unmarshal msg body error: " + err.Error())
+			}
+
+			rows, err := DB.Query("SELECT id FROM video WHERE video_id='" + s.Id + "'")
+			if err != nil {
+				log.Println("Select video Error " + err.Error())
+			}
+			defer rows.Close()
+
+			var id int
+
+			for rows.Next() {
+				rows.Scan(&id)
+			}
+
+			if id > 0 {
+				_, err := insertStmt.Exec(id, s.ViewCount, s.LikeCount, s.DislikeCount, s.FavorCount, s.CommentCount, time.Now())
+				if err != nil {
+					log.Println("Statistic insert error: " + err.Error())
+				}
+				log.Printf("Insert statistic %s\n", s.Id)
+			}
+		}
+
+	}(statChannel, insertStmt)
 
 	log.Printf("Video %d fined!\n", len(videos))
 

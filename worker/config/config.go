@@ -12,7 +12,9 @@ type Configuration struct {
 	Balancer string `json:"balancer"`
 	Cdn      string `json:"cdn"`
 	Port     string `json:"port"`
+	ApiKey   string `json:"api_key"`
 	Limit    int    `json:"limit"`
+	Rabbitmq string `json:"rabbitmq"`
 }
 
 func (c *Configuration) Init() error {
