@@ -120,6 +120,10 @@ func main() {
 					if err != nil {
 						log.Println("Marshal stat Error: " + err.Error())
 					}
+					if stat == nil {
+						log.Println("Update stat Error")
+						return
+					}
 					msg := amqp.Publishing{
 						DeliveryMode: amqp.Persistent,
 						Timestamp:    time.Now(),

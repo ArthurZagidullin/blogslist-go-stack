@@ -30,8 +30,11 @@ func (v *Video) Update(apiKey string) Statistic {
 		log.Println("error:", err)
 	}
 	log.Printf("%+v", stat)
-	result := stat.Items[0].Statistics
-	result.Id = v.Id
+	var result Statistic
+	if len(stat.Items) > 0 {
+		result = stat.Items[0].Statistics
+		result.Id = v.Id
+	}
 	return result
 }
 
