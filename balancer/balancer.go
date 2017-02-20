@@ -176,25 +176,25 @@ func main() {
 	}
 	defer statChannel.Close()
 
+	durable, exclusive := false, false
+	autoDelete, noWait := true, true
+
+	q, _ := statChannel.QueueDeclare("logs", durable, autoDelete, exclusive, noWait, nil)
+	statChannel.QueueBind(q.Name, "#", "logs", false, nil)
+	autoAck, exclusive, noLocal, noWait := false, false, false, false
+
+	messages, _ := statChannel.Consume(q.Name, "logs", autoAck, exclusive, noLocal, noWait, nil)
+
 	log.Println("Connection success!")
 
 	videos := GetVideos(DB)
 
-	go func(c *amqp.Channel, insertStmt *sql.Stmt) {
-		durable, exclusive := false, false
-		autoDelete, noWait := true, true
+	go func(msg <-chan amqp.Delivery, insertStmt *sql.Stmt) {
 
-		q, _ := c.QueueDeclare("logs", durable, autoDelete, exclusive, noWait, nil)
-		c.QueueBind(q.Name, "#", "logs", false, nil)
-
-		autoAck, exclusive, noLocal, noWait := false, false, false, false
-
-		messages, _ := c.Consume(q.Name, "logs", autoAck, exclusive, noLocal, noWait, nil)
 		multiAck := false
 
 		for msg := range messages {
 			log.Println("Body:", string(msg.Body), "Timestamp:", msg.Timestamp)
-			msg.Ack(multiAck)
 
 			var s struct {
 				Id, ViewCount, LikeCount, DislikeCount, FavorCount, CommentCount string
@@ -224,9 +224,10 @@ func main() {
 				}
 				log.Printf("Insert statistic %s\n", s.Id)
 			}
+			msg.Ack(multiAck)
 		}
 
-	}(statChannel, insertStmt)
+	}(messages, insertStmt)
 
 	log.Printf("Video %d fined!\n", len(videos))
 
